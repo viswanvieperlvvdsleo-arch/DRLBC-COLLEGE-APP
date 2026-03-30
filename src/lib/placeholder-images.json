@@ -1,0 +1,76 @@
+{
+  "placeholderImages": [
+    {
+      "id": "user-avatar",
+      "description": "A placeholder for a user's avatar.",
+      "imageUrl": "https://picsum.photos/seed/user-avatar/40/40",
+      "imageHint": "profile picture"
+    },
+    {
+      "id": "evelyn-avatar",
+      "description": "Avatar for Dr. Evelyn Reed.",
+      "imageUrl": "https://picsum.photos/seed/evelyn/40/40",
+      "imageHint": "professor portrait"
+    },
+    {
+      "id": "lecture-hall",
+      "description": "Image of a lecture hall for an announcement.",
+      "imageUrl": "https://picsum.photos/seed/lecture-hall/600/400",
+      "imageHint": "lecture hall"
+    },
+    {
+      "id": "events-committee-avatar",
+      "description": "Avatar for the events committee.",
+      "imageUrl": "https://picsum.photos/seed/events-committee/40/40",
+      "imageHint": "logo"
+    },
+    {
+      "id": "hackathon",
+      "description": "Image for a hackathon announcement.",
+      "imageUrl": "https://picsum.photos/seed/hackathon/600/400",
+      "imageHint": "students coding"
+    },
+    {
+      "id": "cs-dept-avatar",
+      "description": "Avatar for CS Department chat.",
+      "imageUrl": "https://picsum.photos/seed/cs-dept/40/40",
+      "imageHint": "logo"
+    },
+    {
+      "id": "mech-eng-avatar",
+      "description": "Avatar for Mech Eng chat.",
+      "imageUrl": "https://picsum.photos/seed/mech-eng/40/40",
+      "imageHint": "logo"
+    },
+    {
+      "id": "nss-avatar",
+      "description": "Avatar for NSS Volunteers chat.",
+      "imageUrl": "https://picsum.photos/seed/nss/40/40",
+      "imageHint": "logo"
+    },
+    {
+      "id": "book-club-avatar",
+      "description": "Avatar for The Book Club chat.",
+      "imageUrl": "https://picsum.photos/seed/book-club/40/40",
+      "imageHint": "book"
+    },
+    {
+      "id": "ece-faculty-avatar",
+      "description": "Avatar for ECE Faculty chat.",
+      "imageUrl": "https://picsum.photos/seed/ece-faculty/40/40",
+      "imageHint": "logo"
+    },
+    {
+      "id": "alice-avatar",
+      "description": "Avatar for a user named Alice.",
+      "imageUrl": "https://picsum.photos/seed/alice/40/40",
+      "imageHint": "profile picture"
+    },
+    {
+      "id": "bob-avatar",
+      "description": "Avatar for a user named Bob.",
+      "imageUrl": "https://picsum.photos/seed/bob/40/40",
+      "imageHint": "profile picture"
+    }
+  ]
+}

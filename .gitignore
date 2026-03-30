@@ -1,0 +1,13 @@
+node_modules/
+.next/
+.env
+.env.local
+public/uploads/
+*.log
+dev.db
+.DS_Store
+db/*.db
+public/sw.js
+public/workbox-*.js
+public/worker-*.js
+src/generated/prisma/

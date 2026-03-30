@@ -1,0 +1,406 @@
+
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user in the system, either a student or a faculty member.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The unique identifier for the user."
+        },
+        "name": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "avatar": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the user's profile picture."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["Student", "Professor", "Associate Professor", "Assistant Professor"],
+          "description": "The user's role in the institution."
+        },
+        "department": {
+          "type": "string",
+          "description": "The academic department the user belongs to."
+        },
+        "bio": {
+          "type": "string",
+          "description": "A short biography of the user."
+        },
+        "isFollowing": {
+          "type": "boolean",
+          "description": "Indicates if the current user is following this user."
+        }
+      },
+      "required": ["id", "name", "avatar", "email", "role", "department"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "A post made by a user in the main feed.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Unique identifier for the post."
+        },
+        "authorId": {
+          "type": "string",
+          "description": "ID of the user who created the post."
+        },
+        "content": {
+          "type": "string",
+          "description": "The text content of the post."
+        },
+        "image": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of an image attached to the post."
+        },
+        "likes": {
+          "type": "number",
+          "description": "The number of likes the post has received."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the post was created."
+        }
+      },
+      "required": ["id", "authorId", "content", "likes", "createdAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a post.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Unique identifier for the comment."
+        },
+        "authorId": {
+          "type": "string",
+          "description": "ID of the user who wrote the comment."
+        },
+        "text": {
+          "type": "string",
+          "description": "The content of the comment."
+        },
+        "likes": {
+          "type": "number",
+          "description": "Number of likes on the comment."
+        }
+      },
+      "required": ["id", "authorId", "text", "likes"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "A private or group chat conversation.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "userIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "isGroup": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "groupAvatar": {
+          "type": "string",
+          "format": "uri"
+        },
+        "adminIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["id", "userIds", "isGroup"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single message within a chat.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "chatId": {
+          "type": "string"
+        },
+        "senderId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sharedPostId": {
+          "type": "number"
+        },
+        "sharedNoteId": {
+          "type": "number"
+        },
+        "replyToId": {
+          "type": "string"
+        },
+        "isDeleted": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "chatId", "senderId", "text", "timestamp"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "An educational note or document uploaded by a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "authorId": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "course": {
+          "type": "string",
+          "enum": ["btech-eng", "bsc"]
+        },
+        "branch": {
+          "type": "string"
+        },
+        "year": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "fileUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "fileName": {
+          "type": "string"
+        },
+        "fileSize": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "title", "authorId", "date", "course", "branch", "year", "subject", "fileUrl"]
+    },
+    "Club": {
+      "title": "Club",
+      "description": "A student-run club or organization.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "memberCount": {
+          "type": "number"
+        },
+        "uploaderId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "description", "memberCount", "uploaderId", "createdAt"]
+    },
+    "Internship": {
+      "title": "Internship",
+      "description": "An internship opportunity posted by faculty.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "uploaderId": {
+          "type": "string"
+        },
+        "postedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "title", "company", "description", "url", "uploaderId", "postedAt"]
+    },
+    "Registration": {
+      "title": "Registration",
+      "description": "An application for a student to join a group like NSS or NCC.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "studentName": {
+          "type": "string"
+        },
+        "studentId": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Pending", "Approved", "Denied"]
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "studentName", "studentId", "group", "status", "submittedAt"]
+    },
+    "Reel": {
+      "title": "Reel",
+      "description": "A short video clip shared by a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "authorId": {
+          "type": "string"
+        },
+        "videoUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "caption": {
+          "type": "string"
+        },
+        "likes": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "authorId", "videoUrl", "likes", "createdAt"]
+    }
+  },
+  "auth": {
+    "providers": ["email"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Stores public profiles for all users."
+    },
+    "/posts": {
+      "schema": {
+        "$ref": "#/entities/Post"
+      },
+      "description": "Collection of all posts in the main feed."
+    },
+    "/posts/{postId}/comments": {
+      "schema": {
+        "$ref": "#/entities/Comment"
+      },
+      "description": "Sub-collection of comments for a specific post."
+    },
+    "/chats": {
+      "schema": {
+        "$ref": "#/entities/Chat"
+      },
+      "description": "Collection of all chat sessions, both private and group."
+    },
+    "/chats/{chatId}/messages": {
+      "schema": {
+        "$ref": "#/entities/Message"
+      },
+      "description": "Sub-collection of messages for a specific chat."
+    },
+    "/notes": {
+      "schema": {
+        "$ref": "#/entities/Note"
+      },
+      "description": "Repository of all shared notes."
+    },
+    "/clubs": {
+      "schema": {
+        "$ref": "#/entities/Club"
+      },
+      "description": "Collection of all student clubs."
+    },
+    "/internships": {
+      "schema": {
+        "$ref": "#/entities/Internship"
+      },
+      "description": "Collection of all internship postings."
+    },
+    "/registrations": {
+      "schema": {
+        "$ref": "#/entities/Registration"
+      },
+      "description": "Collection of all student applications for groups."
+    },
+    "/reels": {
+      "schema": {
+        "$ref": "#/entities/Reel"
+      },
+      "description": "Collection of all video reels."
+    }
+  }
+}
+
+    

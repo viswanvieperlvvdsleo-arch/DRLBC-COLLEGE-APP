@@ -1,0 +1,453 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                       String              @id @default(uuid())
+  email                    String              @unique
+  password                 String
+  username                 String
+  role                     Role
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  avatarUrl                String?
+  bio                      String?
+  course                   String?
+  branch                   String?
+  section                  String?
+  year                     String?
+  pendingCourse            String?
+  pendingBranch            String?
+  pendingSection           String?
+  pendingYear              String?
+  notifyEmailAnnouncements Boolean             @default(true)
+  notifyEmailDigest        Boolean             @default(true)
+  notifyPushComments       Boolean             @default(true)
+  notifyPushMessages       Boolean             @default(false)
+  notifyPushPosts          Boolean             @default(true)
+  theme                    String?
+  lastSeenAt               DateTime?
+  notifyPushInternships    Boolean             @default(true)
+  notifyPushLikes          Boolean             @default(true)
+  notifyPushNotes          Boolean             @default(true)
+  notifyPushNotices        Boolean             @default(true)
+  notifyPushReels          Boolean             @default(true)
+  notifyPushSchedule       Boolean             @default(true)
+  notifyNcc                Boolean             @default(false)
+  notifyNss                Boolean             @default(false)
+  sentMessages             ChatMessage[]
+  messageHides             ChatMessageHidden[]
+  messageStars             ChatMessageStar[]
+  chatParticipants         ChatParticipant[]
+  comments                 Comment[]
+  commentLikes             CommentLike[]
+  internships              Internship[]
+  notes                    Note[]
+  notices                  Notice[]
+  notifications            Notification[]
+  pushSubscriptions        PushSubscription[]
+  posts                    Post[]
+  postLikes                PostLike[]
+  reels                    Reel[]
+  reelComments             ReelComment[]
+  reelCommentLikes         ReelCommentLike[]
+  reelLikes                ReelLike[]
+  registrations            Registration[]      @relation("UserRegistrationApplicant")
+  reviewedRegistrations    Registration[]      @relation("UserRegistrationReviewer")
+  scheduleFiles            ScheduleFile[]
+
+  @@index([role, course, branch, year, section])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}
+
+model Post {
+  id        Int        @id @default(autoincrement())
+  authorId  String
+  caption   String
+  mediaUrl  String?
+  mediaType MediaType?
+  likeCount Int        @default(0)
+  createdAt DateTime   @default(now())
+  comments  Comment[]
+  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes     PostLike[]
+
+  @@index([authorId, createdAt])
+}
+
+model Note {
+  id          Int      @id @default(autoincrement())
+  authorId    String
+  title       String
+  description String
+  course      String
+  branch      String
+  section     String?
+  year        String
+  subject     String
+  visibility  NoteVisibility @default(VIEW_ALL)
+  fileUrl     String
+  fileName    String
+  fileSize    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId, createdAt])
+  @@index([visibility, course, branch, section, year, subject, createdAt])
+}
+
+model Internship {
+  id          String   @id @default(uuid())
+  title       String
+  company     String
+  location    String
+  description String
+  url         String
+  uploaderId  String
+  postedAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  uploader    User     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([uploaderId, postedAt])
+  @@index([postedAt])
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  type        NotificationType
+  title       String
+  description String
+  link        String
+  actorName   String
+  actorAvatar String?
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, read, createdAt])
+}
+
+model ScheduleFile {
+  id         String           @id @default(uuid())
+  category   ScheduleCategory
+  course     String
+  branch     String
+  year       String
+  fileName   String
+  fileUrl    String
+  fileType   String
+  isImage    Boolean          @default(false)
+  uploaderId String
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  section    String?
+  uploader   User             @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([category, course, branch, year, section, createdAt])
+  @@index([uploaderId, createdAt])
+}
+
+model Notice {
+  id        Int       @id @default(autoincrement())
+  authorId  String
+  caption   String?
+  mediaUrl  String
+  mediaType MediaType
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId, createdAt])
+  @@index([expiresAt])
+}
+
+model Reel {
+  id        Int           @id @default(autoincrement())
+  authorId  String
+  caption   String?
+  videoUrl  String
+  likeCount Int           @default(0)
+  createdAt DateTime      @default(now())
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments  ReelComment[]
+  likes     ReelLike[]
+
+  @@index([authorId, createdAt])
+}
+
+model Comment {
+  id        Int           @id @default(autoincrement())
+  postId    Int
+  authorId  String
+  text      String
+  likeCount Int           @default(0)
+  createdAt DateTime      @default(now())
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post      Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  likes     CommentLike[]
+
+  @@index([postId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model CommentLike {
+  commentId Int
+  userId    String
+  createdAt DateTime @default(now())
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+  @@index([userId])
+}
+
+model PostLike {
+  postId    Int
+  userId    String
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId])
+}
+
+model ReelComment {
+  id        Int               @id @default(autoincrement())
+  reelId    Int
+  authorId  String
+  text      String
+  likeCount Int               @default(0)
+  createdAt DateTime          @default(now())
+  author    User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reel      Reel              @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  likes     ReelCommentLike[]
+
+  @@index([reelId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model ReelCommentLike {
+  commentId Int
+  userId    String
+  createdAt DateTime    @default(now())
+  comment   ReelComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+  @@index([userId])
+}
+
+model ReelLike {
+  reelId    Int
+  userId    String
+  createdAt DateTime @default(now())
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([reelId, userId])
+  @@index([userId])
+}
+
+model Chat {
+  id           String            @id @default(uuid())
+  name         String?
+  isGroup      Boolean           @default(false)
+  groupAvatar  String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  messages     ChatMessage[]
+  participants ChatParticipant[]
+}
+
+model ChatParticipant {
+  chatId     String
+  userId     String
+  role       ChatRole  @default(MEMBER)
+  lastReadAt DateTime?
+  joinedAt   DateTime  @default(now())
+  muted      Boolean   @default(false)
+  chat       Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, userId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id         String              @id @default(uuid())
+  chatId     String
+  senderId   String
+  text       String?
+  media      Json?
+  audioUrl   String?
+  sharedPost Json?
+  sharedReel Json?
+  sharedNote Json?
+  replyToId  String?
+  isDeleted  Boolean             @default(false)
+  isSystem   Boolean             @default(false)
+  reactions  Json?
+  createdAt  DateTime            @default(now())
+  chat       Chat                @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender     User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  hides      ChatMessageHidden[]
+  stars      ChatMessageStar[]
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
+}
+
+model ChatMessageStar {
+  messageId String
+  userId    String
+  createdAt DateTime    @default(now())
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@index([userId])
+}
+
+model ChatMessageHidden {
+  messageId String
+  userId    String
+  createdAt DateTime    @default(now())
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@index([userId])
+}
+
+model Registration {
+  id                String             @id @default(uuid())
+  applicantId       String
+  applicantUsername String
+  fullName          String
+  mobile            String
+  group             RegistrationGroup
+  status            RegistrationStatus @default(PENDING)
+  reviewerId        String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  applicant         User               @relation("UserRegistrationApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  reviewer          User?              @relation("UserRegistrationReviewer", fields: [reviewerId], references: [id])
+}
+
+model CourseOption {
+  id        Int            @id @default(autoincrement())
+  value     String         @unique
+  label     String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  branches  BranchOption[]
+  years     YearOption[]
+}
+
+model BranchOption {
+  id        Int             @id @default(autoincrement())
+  courseId  Int
+  value     String
+  label     String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  course    CourseOption    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  sections  SectionOption[]
+
+  @@unique([courseId, value])
+}
+
+model SectionOption {
+  id        Int          @id @default(autoincrement())
+  branchId  Int
+  value     String
+  label     String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  branch    BranchOption @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, value])
+}
+
+model YearOption {
+  id        Int          @id @default(autoincrement())
+  courseId  Int
+  value     String
+  label     String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  course    CourseOption @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, value])
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum NotificationType {
+  POST
+  COMMENT
+  MESSAGE
+  LIKE
+  REEL
+  NOTICE
+  SCHEDULE
+  NOTE
+  INTERNSHIP
+}
+
+enum ScheduleCategory {
+  TIMETABLE
+  ATTENDANCE
+  RESULTS
+}
+
+enum NoteVisibility {
+  CLASS_ONLY
+  VIEW_ALL
+}
+
+enum ChatRole {
+  MEMBER
+  ADMIN
+}
+
+enum RegistrationGroup {
+  NSS
+  NCC
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
