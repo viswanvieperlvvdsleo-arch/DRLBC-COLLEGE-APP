@@ -10,6 +10,9 @@ export interface User {
   department: string;
   bio: string;
   isFollowing?: boolean;
+  isRestricted?: boolean;
+  restrictedAt?: string;
+  chatRetentionUntil?: string;
 }
 
 export interface Post {

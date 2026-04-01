@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { apiError, roleLabel } from "@/lib/api-utils";
+import { apiError, getUserOrError, roleLabel } from "@/lib/api-utils";
+import { purgeExpiredRestrictedChats } from "@/lib/account-restrictions";
 import { hasActiveRealtimeConnection, publishToUsers } from "@/lib/realtime";
 
 export const runtime = "nodejs";
@@ -11,27 +12,6 @@ const onlineWindowMs = 30 * 1000;
 
 const formatTimestamp = (date: Date) =>
   date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-const mapUser = (user: {
-  id: string;
-  username: string;
-  email: string;
-  role: string;
-  bio: string | null;
-  avatarUrl: string | null;
-  lastSeenAt: Date | null;
-}) => ({
-  id: user.id,
-  name: user.username,
-  avatar: user.avatarUrl || placeholderAvatar,
-  email: user.email ?? "",
-  role: roleLabel(user.role),
-  department: "-",
-  bio: user.bio ?? "",
-  isOnline:
-    hasActiveRealtimeConnection(user.id) ||
-    (user.lastSeenAt ? Date.now() - user.lastSeenAt.getTime() < onlineWindowMs : false),
-});
 
 const mapMessage = (message: {
   id: string;
@@ -67,9 +47,51 @@ const mapMessage = (message: {
 });
 
 const participantSelect = {
+  userId: true,
+  username: true,
+  email: true,
+  userRole: true,
+  bio: true,
+  avatarUrl: true,
   role: true,
   muted: true,
-  user: {
+  isDeletedAccount: true,
+  deletedAt: true,
+  chatRetentionUntil: true,
+} as const;
+
+type ParticipantRecord = {
+  userId: string;
+  username: string;
+  email: string;
+  userRole: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  role: string;
+  muted: boolean;
+  isDeletedAccount: boolean;
+  deletedAt: Date | null;
+  chatRetentionUntil: Date | null;
+};
+
+type LiveUserRecord = {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  lastSeenAt: Date | null;
+};
+
+const fetchLiveUsersMap = async (userIds: string[]) => {
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return new Map<string, LiveUserRecord>();
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: uniqueIds } },
     select: {
       id: true,
       username: true,
@@ -79,45 +101,71 @@ const participantSelect = {
       avatarUrl: true,
       lastSeenAt: true,
     },
-  },
-} as const;
+  });
 
-const mapChat = (chat: {
-  id: string;
-  name: string | null;
-  isGroup: boolean;
-  groupAvatar: string | null;
-  participants: Array<{
-    user: {
-      id: string;
-      username: string;
-      email: string;
-      role: string;
-      bio: string | null;
-      avatarUrl: string | null;
-      lastSeenAt: Date | null;
-    };
-    role: string;
-    muted: boolean;
-  }>;
-  messages: Array<{
+  return new Map(users.map((user) => [user.id, user]));
+};
+
+const mapParticipantUser = (
+  participant: ParticipantRecord,
+  liveUsers: Map<string, LiveUserRecord>
+) => {
+  const liveUser = liveUsers.get(participant.userId);
+  const isDeletedAccount = participant.isDeletedAccount || !liveUser;
+  const username = liveUser?.username ?? participant.username;
+  const role = liveUser?.role ?? participant.userRole;
+  const bio = liveUser?.bio ?? participant.bio;
+  const avatarUrl = liveUser?.avatarUrl ?? participant.avatarUrl;
+  const lastSeenAt = liveUser?.lastSeenAt ?? null;
+
+  return {
+    id: participant.userId,
+    name: isDeletedAccount ? `${username} (Restricted)` : username,
+    avatar: avatarUrl || placeholderAvatar,
+    email: liveUser?.email ?? participant.email,
+    role: roleLabel(role),
+    department: "-",
+    bio: isDeletedAccount ? "This account was restricted by the college." : bio ?? "",
+    isRestricted: isDeletedAccount,
+    restrictedAt: participant.deletedAt?.toISOString(),
+    chatRetentionUntil: participant.chatRetentionUntil?.toISOString(),
+    isOnline: Boolean(
+      !isDeletedAccount &&
+        (hasActiveRealtimeConnection(participant.userId) ||
+          (lastSeenAt ? Date.now() - lastSeenAt.getTime() < onlineWindowMs : false))
+    ),
+  };
+};
+
+const mapChat = (
+  chat: {
     id: string;
-    text: string | null;
-    senderId: string;
-    createdAt: Date;
-    media: unknown;
-    audioUrl: string | null;
-    sharedPost: unknown;
-    sharedReel: unknown;
-    sharedNote: unknown;
-    reactions: unknown;
-    replyToId: string | null;
-    isDeleted: boolean;
-    isSystem: boolean;
-  }>;
-}, viewerId?: string) => {
+    name: string | null;
+    isGroup: boolean;
+    groupAvatar: string | null;
+    participants: ParticipantRecord[];
+    messages: Array<{
+      id: string;
+      text: string | null;
+      senderId: string;
+      createdAt: Date;
+      media: unknown;
+      audioUrl: string | null;
+      sharedPost: unknown;
+      sharedReel: unknown;
+      sharedNote: unknown;
+      reactions: unknown;
+      replyToId: string | null;
+      isDeleted: boolean;
+      isSystem: boolean;
+      stars?: Array<{ userId: string }>;
+    }>;
+  },
+  liveUsers: Map<string, LiveUserRecord>,
+  viewerId?: string
+) => {
   const viewerParticipant = viewerId
-    ? chat.participants.find((p) => p.user.id === viewerId)
+    ? chat.participants.find((participant) => participant.userId === viewerId)
     : undefined;
 
   return {
@@ -125,13 +173,31 @@ const mapChat = (chat: {
     name: chat.name ?? undefined,
     isGroup: chat.isGroup,
     groupAvatar: chat.groupAvatar ?? undefined,
-    users: chat.participants.map((p) => mapUser(p.user)),
-    admins: chat.participants.filter((p) => p.role === "ADMIN").map((p) => p.user.id),
+    users: chat.participants.map((participant) => mapParticipantUser(participant, liveUsers)),
+    admins: chat.participants
+      .filter((participant) => participant.role === "ADMIN")
+      .map((participant) => participant.userId),
     messages: chat.messages.map(mapMessage).reverse(),
     unreadCount: 0,
     isMuted: viewerParticipant?.muted ?? false,
   };
 };
+
+const toParticipantCreate = (user: {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  bio: string | null;
+  avatarUrl: string | null;
+}) => ({
+  userId: user.id,
+  username: user.username,
+  email: user.email,
+  userRole: user.role,
+  bio: user.bio,
+  avatarUrl: user.avatarUrl,
+});
 
 export async function GET(req: Request) {
   try {
@@ -141,6 +207,11 @@ export async function GET(req: Request) {
     if (!userId) {
       return apiError("Missing userId", 400);
     }
+
+    const { error } = await getUserOrError(userId);
+    if (error) return error;
+
+    await purgeExpiredRestrictedChats();
 
     const chats = await prisma.chat.findMany({
       where: { participants: { some: { userId } } },
@@ -158,7 +229,15 @@ export async function GET(req: Request) {
       },
     });
 
-    return NextResponse.json({ chats: chats.map((chat) => mapChat(chat, userId)) });
+    const liveUsers = await fetchLiveUsersMap(
+      chats.flatMap((chat) =>
+        chat.participants
+          .filter((participant) => !participant.isDeletedAccount)
+          .map((participant) => participant.userId)
+      )
+    );
+
+    return NextResponse.json({ chats: chats.map((chat) => mapChat(chat, liveUsers, userId)) });
   } catch (err) {
     console.error("CHATS GET API CRASH:", err);
     return apiError("Internal server error", 500);
@@ -175,6 +254,9 @@ export async function POST(req: Request) {
       return apiError("Missing userId", 400);
     }
 
+    const { error } = await getUserOrError(userId);
+    if (error) return error;
+
     if (otherUserId) {
       if (otherUserId === userId) {
         return apiError("Cannot create a chat with yourself", 400);
@@ -182,7 +264,14 @@ export async function POST(req: Request) {
 
       const users = await prisma.user.findMany({
         where: { id: { in: [userId, otherUserId] } },
-        select: { id: true, role: true },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          role: true,
+          bio: true,
+          avatarUrl: true,
+        },
       });
 
       if (users.length !== 2) {
@@ -190,13 +279,12 @@ export async function POST(req: Request) {
       }
 
       const isStudent = (role: string) => role?.toLowerCase() === "student";
-      const initiator = users.find((u) => u.id === userId)!;
-      const peer = users.find((u) => u.id === otherUserId)!;
+      const initiator = users.find((user) => user.id === userId)!;
+      const peer = users.find((user) => user.id === otherUserId)!;
 
       const initiatorIsStudent = isStudent(initiator.role);
       const peerIsStudent = isStudent(peer.role);
 
-      // Restrict only student–student chats; teacher–teacher and teacher–student are allowed
       if (initiatorIsStudent && peerIsStudent) {
         return apiError(
           "Student-to-student chats are disabled. Please contact a teacher instead.",
@@ -214,19 +302,24 @@ export async function POST(req: Request) {
         },
         include: {
           participants: { select: participantSelect },
-          messages: { orderBy: { createdAt: "desc" }, take: 1 },
+          messages: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       });
 
+      const liveUsers = await fetchLiveUsersMap(users.map((user) => user.id));
+
       if (existing) {
-        return NextResponse.json({ chat: mapChat(existing, userId) });
+        return NextResponse.json({ chat: mapChat(existing, liveUsers, userId) });
       }
 
       const created = await prisma.chat.create({
         data: {
           isGroup: false,
           participants: {
-            create: [{ userId }, { userId: otherUserId }],
+            create: [toParticipantCreate(initiator), toParticipantCreate(peer)],
           },
         },
         include: {
@@ -238,12 +331,12 @@ export async function POST(req: Request) {
       publishToUsers(
         [otherUserId],
         "chat-upsert",
-        { chat: mapChat(created) },
+        { chat: mapChat(created, liveUsers, otherUserId) },
         { excludeUserIds: [userId] }
       );
 
-      return NextResponse.json({ chat: mapChat(created, userId) }, { status: 201 });
-     }
+      return NextResponse.json({ chat: mapChat(created, liveUsers, userId) }, { status: 201 });
+    }
 
     const memberIdsRaw = Array.isArray(body.memberIds) ? body.memberIds : [];
     const memberIds = memberIdsRaw
@@ -254,20 +347,36 @@ export async function POST(req: Request) {
       return apiError("Missing memberIds", 400);
     }
 
-    // Only allow non-students (teachers/admins) to create groups
     const creator = await prisma.user.findUnique({
       where: { id: userId },
       select: { role: true },
     });
-    const isStudent = (r?: string) => r?.toLowerCase() === "student";
+    const isStudent = (role?: string) => role?.toLowerCase() === "student";
     if (!creator || isStudent(creator.role)) {
       return apiError("Only teachers can create group chats.", 403);
     }
 
     const name = String(body.name || "").trim();
     const groupAvatar = String(body.groupAvatar || "").trim() || null;
-
     const uniqueIds = Array.from(new Set([userId, ...memberIds]));
+
+    const users = await prisma.user.findMany({
+      where: { id: { in: uniqueIds } },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        bio: true,
+        avatarUrl: true,
+      },
+    });
+
+    if (users.length !== uniqueIds.length) {
+      return apiError("One or more selected users were not found", 404);
+    }
+
+    const liveUsers = await fetchLiveUsersMap(uniqueIds);
 
     const created = await prisma.chat.create({
       data: {
@@ -275,9 +384,9 @@ export async function POST(req: Request) {
         name,
         groupAvatar,
         participants: {
-          create: uniqueIds.map((id) => ({
-            userId: id,
-            role: id === userId ? "ADMIN" : "MEMBER",
+          create: users.map((user) => ({
+            ...toParticipantCreate(user),
+            role: user.id === userId ? "ADMIN" : "MEMBER",
           })),
         },
       },
@@ -290,11 +399,11 @@ export async function POST(req: Request) {
     publishToUsers(
       uniqueIds,
       "chat-upsert",
-      { chat: mapChat(created) },
+      { chat: mapChat(created, liveUsers, userId) },
       { excludeUserIds: [userId] }
     );
 
-    return NextResponse.json({ chat: mapChat(created, userId) }, { status: 201 });
+    return NextResponse.json({ chat: mapChat(created, liveUsers, userId) }, { status: 201 });
   } catch (err) {
     console.error("CHATS POST API CRASH:", err);
     return apiError("Internal server error", 500);

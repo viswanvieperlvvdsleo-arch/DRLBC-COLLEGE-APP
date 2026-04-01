@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
+import { hardDeleteUserAccount } from "@/lib/account-restrictions";
 
 type RegisterPayload = {
   email?: string;
@@ -99,10 +100,14 @@ export async function POST(req: Request) {
     });
 
     if (existing) {
-      return NextResponse.json(
-        { error: "User already exists" },
-        { status: 409 }
-      );
+      if (existing.restrictedAt) {
+        await hardDeleteUserAccount(existing.id);
+      } else {
+        return NextResponse.json(
+          { error: "User already exists" },
+          { status: 409 }
+        );
+      }
     }
 
     const username = usernameInput && usernameInput.length > 0

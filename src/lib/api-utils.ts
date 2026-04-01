@@ -32,6 +32,12 @@ export async function getUserOrError(authorId: string) {
   if (!user) {
     return { user: null as const, error: apiError("User not found", 404) };
   }
+  if (user.restrictedAt) {
+    return {
+      user: null as const,
+      error: apiError("This account has been restricted and can no longer use the app.", 403),
+    };
+  }
   return { user, error: null as const };
 }
 
@@ -140,6 +146,7 @@ export async function notifyUsersByPreference(params: {
 
   const where = {
     ...(actorId ? { id: { not: actorId } } : {}),
+    restrictedAt: null,
     [preferenceKey]: true,
   } satisfies Prisma.UserWhereInput;
 
@@ -166,6 +173,7 @@ export async function notifyUserByPreference(params: {
 
   const where = {
     id: userId,
+    restrictedAt: null,
     [preferenceKey]: true,
   } satisfies Prisma.UserWhereInput;
 

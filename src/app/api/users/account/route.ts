@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { hardDeleteUserAccount } from "@/lib/account-restrictions";
 
 type AccountUpdatePayload = {
   userId?: string;
@@ -137,9 +138,15 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Invalid password" }, { status: 401 });
     }
 
-    await prisma.user.delete({ where: { id: userId } });
+    const deleted = await hardDeleteUserAccount(userId);
+    if (!deleted) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
-    return NextResponse.json({ message: "Account deleted" });
+    return NextResponse.json({
+      message: "Account deleted",
+      chatRetentionUntil: deleted.chatRetentionUntil,
+    });
   } catch (err) {
     console.error("ACCOUNT DELETE CRASH:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

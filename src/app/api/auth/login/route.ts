@@ -28,6 +28,13 @@ export async function POST(req: Request) {
       );
     }
 
+    if (user.restrictedAt) {
+      return NextResponse.json(
+        { error: "This account was restricted and can no longer be used. Please contact a teacher." },
+        { status: 403 }
+      );
+    }
+
     const isValid = await bcrypt.compare(password, user.password);
 
     if (!isValid) {

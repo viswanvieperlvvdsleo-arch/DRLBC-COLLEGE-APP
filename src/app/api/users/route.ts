@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserOrError, requireTeacherOrError, roleLabel } from "@/lib/api-utils";
+import { hardDeleteUserAccount } from "@/lib/account-restrictions";
 
 export async function GET(req: Request) {
   try {
@@ -8,7 +9,10 @@ export async function GET(req: Request) {
     const excludeId = searchParams.get("excludeId")?.trim();
 
     const users = await prisma.user.findMany({
-      where: excludeId ? { id: { not: excludeId } } : undefined,
+      where: {
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+        restrictedAt: null,
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -78,13 +82,17 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Only student accounts can be deleted here" }, { status: 403 });
     }
 
-    await prisma.user.delete({ where: { id: targetUserId } });
+    const deleted = await hardDeleteUserAccount(targetUserId);
+    if (!deleted) {
+      return NextResponse.json({ error: "Target user not found" }, { status: 404 });
+    }
 
     return NextResponse.json({
       message: "Student account deleted",
       deletedUser: {
         id: target.id,
         username: target.username,
+        chatRetentionUntil: deleted.chatRetentionUntil,
       },
     });
   } catch (err) {

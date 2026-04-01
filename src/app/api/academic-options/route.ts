@@ -111,7 +111,7 @@ export async function GET() {
         orderBy: { id: "asc" },
       }),
       prisma.user.findMany({
-        where: { role: "STUDENT" },
+        where: { role: "STUDENT", restrictedAt: null },
         select: { course: true, branch: true, section: true, year: true },
       }),
     ]);

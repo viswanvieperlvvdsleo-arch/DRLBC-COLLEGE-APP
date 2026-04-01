@@ -66,6 +66,7 @@ export default function HomePage() {
     role: currentUser.role,
     avatar: currentUser.avatar || "/avatar-placeholder.png",
   };
+  const canCreateHomeContent = safeUser.role?.toLowerCase?.() !== "student";
 
   useEffect(() => {
     posts.forEach((post) => {
@@ -475,8 +476,8 @@ export default function HomePage() {
       <NoticeRail
         groupedNotices={groupedNotices}
         onNoticeClick={(id) => setActiveNoticeId(id)}
-        onAddNotice={safeUser.role !== "Student" ? handleFileSelect : undefined}
-        onAddTypo={safeUser.role !== "Student" ? openTypoComposer : undefined}
+        onAddNotice={canCreateHomeContent ? handleFileSelect : undefined}
+        onAddTypo={canCreateHomeContent ? openTypoComposer : undefined}
         currentUser={safeUser as any}
       />
 

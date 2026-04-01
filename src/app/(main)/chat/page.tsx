@@ -79,6 +79,16 @@ import { Dialog, DialogContent, DialogClose, DialogTitle, DialogHeader, DialogDe
 import { ChatListSkeleton } from '@/components/app/skeletons';
 
 const isStudent = (role?: string) => role?.toLowerCase() === "student";
+const formatRetentionDate = (value?: string) => {
+  if (!value) return "24 days from the restriction date";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "24 days from the restriction date";
+  return parsed.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
 
 
 // Components
@@ -143,7 +153,8 @@ function ChatListPanel({
                 const otherUser = chat.users.find((u) => u.id !== currentUser.id);
                 const chatName = isGroup ? chat.name : otherUser?.name;
                 const chatAvatar = isGroup ? chat.groupAvatar : otherUser?.avatar;
-                const isOnline = Boolean(!isGroup && otherUser?.isOnline);
+                const isRestrictedDirectChat = Boolean(!isGroup && otherUser?.isRestricted);
+                const isOnline = Boolean(!isGroup && !otherUser?.isRestricted && otherUser?.isOnline);
 
                 const lastMessage = chat.messages[chat.messages.length - 1];
                 const unreadCount = chat.unreadCount;
@@ -170,6 +181,9 @@ function ChatListPanel({
                 }
                 if (lastMessage?.audioUrl) {
                 lastMessageText = 'Voice message';
+                }
+                if (isRestrictedDirectChat) {
+                    lastMessageText = `Restricted account. Chat auto-deletes on ${formatRetentionDate(otherUser?.chatRetentionUntil)}.`;
                 }
 
                 return (
@@ -830,7 +844,9 @@ function ChatWindowPanel({
 
   const isStudentOnly1to1 =
     !chat.isGroup && chat.users.length === 2 && chat.users.every((u) => isStudent(u.role));
-  const canSend = chat.isGroup || !isStudentOnly1to1;
+  const hasRestrictedParticipant =
+    !chat.isGroup && chat.users.some((u) => u.id !== currentUser.id && u.isRestricted);
+  const canSend = !currentUser.isRestricted && !hasRestrictedParticipant && (chat.isGroup || !isStudentOnly1to1);
   const canDeleteForEveryone = (message?: Message | null) =>
     Boolean(message && message.senderId === currentUser.id && !message.isDeleted);
   const selectedMessages = useMemo(
@@ -1430,16 +1446,21 @@ function ChatWindowPanel({
 
   const isGroup = chat.isGroup;
   const otherUser = !isGroup ? chat.users.find((u) => u.id !== currentUser.id)! : null;
+  const isRestrictedDirectChat = Boolean(!isGroup && otherUser?.isRestricted);
+  const restrictedChatNotice = isRestrictedDirectChat
+    ? `This user was restricted. This chat and its messages will be deleted on ${formatRetentionDate(otherUser?.chatRetentionUntil)}.`
+    : null;
   const chatName = isGroup ? chat.name : otherUser?.name;
   const chatAvatar = isGroup ? chat.groupAvatar : otherUser?.avatar;
   const chatSubtext = isGroup
     ? `${chat.users.length} members`
-    : otherUser?.isOnline
+    : isRestrictedDirectChat
+      ? "Restricted"
+      : otherUser?.isOnline
       ? "Online"
       : "Offline";
 
-
-  const isSendable = message.trim().length > 0;
+  const isSendable = message.trim().length > 0 && canSend;
   
   if (view === 'contactInfo' && otherUser) {
       return (
@@ -1523,7 +1544,7 @@ function ChatWindowPanel({
                         <AvatarImage src={chatAvatar} alt={chatName} />
                         <AvatarFallback>{chatName?.substring(0, 2)}</AvatarFallback>
                     </Avatar>
-                    {!isGroup && otherUser?.isOnline && (
+                    {!isGroup && otherUser?.isOnline && !otherUser?.isRestricted && (
                         <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-pink-500 ring-2 ring-card" />
                     )}
                 </div>
@@ -1875,6 +1896,11 @@ function ChatWindowPanel({
         {isStudentOnly1to1 && (
           <div className="p-3 bg-secondary rounded-lg text-sm text-muted-foreground">
             Student-to-student messaging is disabled. Please contact a teacher.
+          </div>
+        )}
+        {restrictedChatNotice && (
+          <div className="p-3 bg-secondary rounded-lg text-sm text-muted-foreground">
+            {restrictedChatNotice}
           </div>
         )}
          {canSend && replyingTo && (
@@ -2350,7 +2376,7 @@ function ChatPageContent() {
     name: user.username,
     avatar: user.avatarUrl || "https://picsum.photos/seed/user-avatar/128/128",
     email: user.email ?? "",
-    role: user.role,
+    role: (user.role as User["role"]) || "Student",
     department: "-",
     bio: user.bio ?? "",
   });

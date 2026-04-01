@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { apiError, createNotificationsAndPush } from "@/lib/api-utils";
+import { apiError, createNotificationsAndPush, getUserOrError } from "@/lib/api-utils";
+import { purgeExpiredRestrictedChats } from "@/lib/account-restrictions";
 import { hasActiveRealtimeConnection, publishToUsers } from "@/lib/realtime";
 import { saveUploadedFile } from "@/lib/upload";
 
@@ -12,6 +13,30 @@ const formatTimestamp = (date: Date) =>
 
 const placeholderAvatar = "/icons/clg_icon_128.png";
 const onlineWindowMs = 30 * 1000;
+
+type ParticipantRecord = {
+  userId: string;
+  username: string;
+  email: string;
+  userRole: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  role: string;
+  muted: boolean;
+  isDeletedAccount: boolean;
+  deletedAt: Date | null;
+  chatRetentionUntil: Date | null;
+};
+
+type LiveUserRecord = {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  lastSeenAt: Date | null;
+};
 
 const mapMessage = (message: {
   id: string;
@@ -54,64 +79,122 @@ const ensureParticipant = async (chatId: string, userId: string) => {
   return Boolean(membership);
 };
 
-const mapUser = (user: {
-  id: string;
-  username: string;
-  email: string;
-  role: string;
-  bio: string | null;
-  avatarUrl: string | null;
-  lastSeenAt: Date | null;
-}) => ({
-  id: user.id,
-  name: user.username,
-  avatar: user.avatarUrl || placeholderAvatar,
-  email: user.email ?? "",
-  role: user.role === "STUDENT" ? "Student" : "Professor",
-  department: "-",
-  bio: user.bio ?? "",
-  isOnline:
-    hasActiveRealtimeConnection(user.id) ||
-    (user.lastSeenAt ? Date.now() - user.lastSeenAt.getTime() < onlineWindowMs : false),
-});
+const participantSelect = {
+  userId: true,
+  username: true,
+  email: true,
+  userRole: true,
+  bio: true,
+  avatarUrl: true,
+  role: true,
+  muted: true,
+  isDeletedAccount: true,
+  deletedAt: true,
+  chatRetentionUntil: true,
+} as const;
+
+const fetchLiveUsersMap = async (userIds: string[]) => {
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return new Map<string, LiveUserRecord>();
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: uniqueIds } },
+    select: {
+      id: true,
+      username: true,
+      email: true,
+      role: true,
+      bio: true,
+      avatarUrl: true,
+      lastSeenAt: true,
+    },
+  });
+
+  return new Map(users.map((user) => [user.id, user]));
+};
+
+const mapParticipantUser = (
+  participant: ParticipantRecord,
+  liveUsers: Map<string, LiveUserRecord>
+) => {
+  const liveUser = liveUsers.get(participant.userId);
+  const isDeletedAccount = participant.isDeletedAccount || !liveUser;
+  const username = liveUser?.username ?? participant.username;
+  const role = liveUser?.role ?? participant.userRole;
+  const bio = liveUser?.bio ?? participant.bio;
+  const avatarUrl = liveUser?.avatarUrl ?? participant.avatarUrl;
+  const lastSeenAt = liveUser?.lastSeenAt ?? null;
+
+  return {
+    id: participant.userId,
+    name: isDeletedAccount ? `${username} (Restricted)` : username,
+    avatar: avatarUrl || placeholderAvatar,
+    email: liveUser?.email ?? participant.email,
+    role: role === "STUDENT" ? "Student" : "Professor",
+    department: "-",
+    bio: isDeletedAccount ? "This account was restricted by the college." : bio ?? "",
+    isRestricted: isDeletedAccount,
+    restrictedAt: participant.deletedAt?.toISOString(),
+    chatRetentionUntil: participant.chatRetentionUntil?.toISOString(),
+    isOnline: Boolean(
+      !isDeletedAccount &&
+        (hasActiveRealtimeConnection(participant.userId) ||
+          (lastSeenAt ? Date.now() - lastSeenAt.getTime() < onlineWindowMs : false))
+    ),
+  };
+};
+
+const getDirectChatRestriction = async (chatId: string) => {
+  const chat = await prisma.chat.findUnique({
+    where: { id: chatId },
+    select: {
+      isGroup: true,
+      participants: {
+        select: participantSelect,
+      },
+    },
+  });
+
+  if (!chat || chat.isGroup) {
+    return null;
+  }
+
+  return chat.participants.find((participant) => participant.isDeletedAccount) ?? null;
+};
 
 const getRealtimeChatPayload = async (chatId: string, latestMessage: ReturnType<typeof mapMessage>) => {
   const chat = await prisma.chat.findUnique({
     where: { id: chatId },
     include: {
       participants: {
-        select: {
-          role: true,
-          muted: true,
-          user: {
-            select: {
-              id: true,
-              username: true,
-              email: true,
-              role: true,
-              bio: true,
-              avatarUrl: true,
-              lastSeenAt: true,
-            },
-          },
-        },
+        select: participantSelect,
       },
     },
   });
 
   if (!chat) return null;
 
+  const liveUsers = await fetchLiveUsersMap(
+    chat.participants
+      .filter((participant) => !participant.isDeletedAccount)
+      .map((participant) => participant.userId)
+  );
+
   return {
-    participantIds: chat.participants.map((participant) => participant.user.id),
+    participantIds: chat.participants
+      .filter((participant) => !participant.isDeletedAccount)
+      .map((participant) => participant.userId),
     chat: {
       id: chat.id,
       name: chat.name ?? undefined,
       isGroup: chat.isGroup,
       groupAvatar: chat.groupAvatar ?? undefined,
-      users: chat.participants.map((participant) => mapUser(participant.user)),
+      users: chat.participants.map((participant) => mapParticipantUser(participant, liveUsers)),
       admins: chat.participants
         .filter((participant) => participant.role === "ADMIN")
-        .map((participant) => participant.user.id),
+        .map((participant) => participant.userId),
       unreadCount: 0,
       messages: [latestMessage],
     },
@@ -127,6 +210,14 @@ export async function GET(req: Request, context: { params: Promise<{ chatId: str
     if (!chatId) {
       return apiError("Missing chatId", 400);
     }
+    if (!userId) {
+      return apiError("Missing userId", 400);
+    }
+    const { error } = await getUserOrError(userId);
+    if (error) return error;
+
+    await purgeExpiredRestrictedChats();
+
     if (!(await ensureParticipant(chatId, userId))) {
       return apiError("Not allowed", 403);
     }
@@ -224,9 +315,20 @@ export async function POST(req: Request, context: { params: Promise<{ chatId: st
     if (!userId) {
       return apiError("Missing userId", 400);
     }
+    const { error } = await getUserOrError(userId);
+    if (error) return error;
+
+    await purgeExpiredRestrictedChats();
+
     if (!(await ensureParticipant(chatId, userId))) {
       return apiError("Not allowed", 403);
     }
+
+    const restrictedParticipant = await getDirectChatRestriction(chatId);
+    if (restrictedParticipant) {
+      return apiError("This chat is read-only because the other account was restricted.", 403);
+    }
+
     if (
       !text &&
       mediaUploads.length === 0 &&
@@ -265,30 +367,34 @@ export async function POST(req: Request, context: { params: Promise<{ chatId: st
     });
 
     const chatParticipants = await prisma.chatParticipant.findMany({
-      where: { chatId, userId: { not: userId } },
-      include: {
-        user: {
-          select: {
-            id: true,
-            notifyPushMessages: true,
-          },
-        },
+      where: {
+        chatId,
+        userId: { not: userId },
+        isDeletedAccount: false,
+      },
+      select: {
+        userId: true,
       },
     });
 
-    const pushRecipients = chatParticipants
-      .filter((participant) => participant.user.notifyPushMessages)
-      .map((participant) => participant.user.id);
+    const pushRecipients = await prisma.user.findMany({
+      where: {
+        id: { in: chatParticipants.map((participant) => participant.userId) },
+        notifyPushMessages: true,
+      },
+      select: { id: true },
+    });
 
     if (pushRecipients.length > 0 && sender) {
       const chatInfo = await prisma.chat.findUnique({
         where: { id: chatId },
         select: { isGroup: true, name: true },
       });
-      const messagePreview = text || (mediaUploads.length || sharedMedia.length ? "Sent an attachment" : "Shared something");
+      const messagePreview =
+        text || (mediaUploads.length || sharedMedia.length ? "Sent an attachment" : "Shared something");
 
       await createNotificationsAndPush({
-        userIds: pushRecipients,
+        userIds: pushRecipients.map((recipient) => recipient.id),
         type: "MESSAGE",
         title: chatInfo?.isGroup
           ? `New message in ${chatInfo.name || "group chat"}`
@@ -334,6 +440,11 @@ export async function PATCH(req: Request, context: { params: Promise<{ chatId: s
     if (!userId || !messageId) {
       return apiError("Missing userId or messageId", 400);
     }
+    const { error } = await getUserOrError(userId);
+    if (error) return error;
+
+    await purgeExpiredRestrictedChats();
+
     if (!(await ensureParticipant(chatId, userId))) {
       return apiError("Not allowed", 403);
     }
@@ -423,6 +534,11 @@ export async function DELETE(req: Request, context: { params: Promise<{ chatId: 
     if (!messageId || !userId) {
       return apiError("Missing messageId or userId", 400);
     }
+    const { error } = await getUserOrError(userId);
+    if (error) return error;
+
+    await purgeExpiredRestrictedChats();
+
     if (!(await ensureParticipant(chatId, userId))) {
       return apiError("Not allowed", 403);
     }

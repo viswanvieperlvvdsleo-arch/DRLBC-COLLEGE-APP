@@ -120,6 +120,7 @@ export async function GET(req: Request) {
     const students = await prisma.user.findMany({
       where: {
         role: "STUDENT",
+        restrictedAt: null,
       },
       orderBy: { username: "asc" },
       select: {
@@ -168,6 +169,7 @@ export async function POST(req: Request) {
         id: true,
         username: true,
         role: true,
+        restrictedAt: true,
         course: true,
         branch: true,
         section: true,
@@ -177,6 +179,7 @@ export async function POST(req: Request) {
 
     if (!targetStudent) return apiError("Student account not found", 404);
     if (targetStudent.role !== "STUDENT") return apiError("Only student accounts can be promoted here", 403);
+    if (targetStudent.restrictedAt) return apiError("Restricted student accounts cannot be promoted", 409);
 
     if (!isCompleteBatch(parseBatch(targetStudent))) {
       return apiError("The selected student does not have a complete academic profile", 400);
@@ -277,6 +280,7 @@ export async function PATCH(req: Request) {
     const matchingStudents = await prisma.user.findMany({
       where: {
         role: "STUDENT",
+        restrictedAt: null,
       },
       select: {
         id: true,

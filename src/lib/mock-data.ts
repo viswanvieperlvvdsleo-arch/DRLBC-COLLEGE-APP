@@ -20,6 +20,9 @@ export interface User {
   pendingYear?: string;
   isFollowing?: boolean;
   isOnline?: boolean;
+  isRestricted?: boolean;
+  restrictedAt?: string;
+  chatRetentionUntil?: string;
   notifyNss?: boolean;
   notifyNcc?: boolean;
 }

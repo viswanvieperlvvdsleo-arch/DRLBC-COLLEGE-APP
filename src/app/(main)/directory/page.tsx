@@ -585,7 +585,7 @@ export default function DirectoryPage() {
 
       toast({
         title: 'Student deleted',
-        description: `${selectedStudent.name}'s account has been removed.`,
+        description: `${selectedStudent.name}'s account was removed from the database. Their direct chats stay visible for 24 days, then auto-delete.`,
       });
 
       closeStudentDialogs();
@@ -1690,8 +1690,8 @@ export default function DirectoryPage() {
             <AlertDialogTitle>Delete student account?</AlertDialogTitle>
             <AlertDialogDescription>
               {selectedStudent
-                ? `This will permanently delete ${selectedStudent.name}'s account. This action cannot be undone.`
-                : 'This will permanently delete the selected student account.'}
+                ? `This will permanently delete ${selectedStudent.name}'s account from the database. Their direct chats will stay read-only for 24 days so others can save important notes or files before those chats are removed too.`
+                : 'This will permanently delete the selected student account from the database and keep direct chats for only 24 more days.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

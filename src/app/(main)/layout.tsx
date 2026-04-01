@@ -119,7 +119,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
             name: parsed.username ?? prev.name,
             email: parsed.email ?? prev.email,
             avatar: parsed.avatar ?? prev.avatar,
-            role: parsed.role ? parsed.role.toLowerCase() : prev.role,
+            role: parsed.role ? mapRoleToLabel(parsed.role) : prev.role,
             department: academicDepartment(parsed) || prev.department,
             course: parsed.course ?? prev.course,
             branch: parsed.branch ?? prev.branch,
